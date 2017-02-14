@@ -429,7 +429,7 @@ def conv_forward_naive(x, w, b, conv_param, verbose=0):
     print 'After pad', x.shape
   N, C, H, W = x.shape
   F, C, HH, WW = w.shape
-  stride = (conv_param['stride'],) * 2
+  stride = (conv_param['stride'], conv_param['stride'] * C)  # account for R G B, R G B, ...
 
   # Make images 2D by combining width and depth into one dimension (R G B R G B ...)
   x_col = np.moveaxis(x, 1, -1)  # Move channels axis --> (N, H, W, C)
@@ -442,8 +442,8 @@ def conv_forward_naive(x, w, b, conv_param, verbose=0):
   w_col = np.concatenate((w_col, b[None, :]), axis=0)  # include weights! --> (HH * WW * C + 1, F)
   if verbose > 0:
     print 'w_col', w_col.shape
-  fshape = (HH, WW, C)
-  row_extent, col_extent, _, _, _, _, _, _, _ = compute_output_size(x_col.shape[1:], fshape, stride)
+  f_2dshape = (HH, WW * C)
+  row_extent, col_extent, _, _, _, _, _, _ = compute_output_size(x_col.shape[1:], f_2dshape, stride)
   num_blocks = row_extent * col_extent
   if verbose > 0:
     print 'row_extent, col_extent', row_extent, col_extent
@@ -457,7 +457,7 @@ def conv_forward_naive(x, w, b, conv_param, verbose=0):
   for i, image in enumerate(x_col):
     if verbose > 1:
       print '2d image', image.shape
-    im_col, im2col_indices[i, :, :] = im2col(image, (HH, WW, C), stride=stride)  # make blocks, keep indices for backpr
+    im_col, im2col_indices[i, :, :] = im2col(image, f_2dshape, stride=stride)  # make blocks, keep indices for backpr
     im_col = np.concatenate((im_col, np.ones((num_blocks, 1))), axis=1)  # include bias factor
     blocks_with_bias[i, :, :] = im_col  # (n_blocks, HH * WW * C + 1)
     if verbose > 1:

@@ -2,29 +2,23 @@ import numpy as np
 
 def compute_output_size(inshape, fshape, stride):
   N, M = inshape
-  HH, WW, C = fshape
+  HH, WW = fshape
   stride_i, stride_j = stride
-  stride_j *= C  # TODO Here comes the hack (see im2col)
   row_extent = (N - HH) / stride_i + 1
-  col_extent = (M - WW * C) / stride_j + 1
-  return row_extent, col_extent, N, M, HH, WW, C, stride_i, stride_j
+  col_extent = (M - WW) / stride_j + 1
+  return row_extent, col_extent, N, M, HH, WW, stride_i, stride_j
 
 
 def im2col(x, fshape, stride, verbose=False):
   # http://stackoverflow.com/questions/30109068/implement-matlabs-im2col-sliding-in-python
-  # TODO HACKED to support color images
-  # Input like:
-  #   R G B R G B R G B ...
-  #   R G B R G B R G B ...
-  #   ...
 
   # Parameters
-  row_extent, col_extent, N, M, HH, WW, C, stride_i, stride_j = compute_output_size(x.shape, fshape, stride)
+  row_extent, col_extent, N, M, HH, WW, stride_i, stride_j = compute_output_size(x.shape, fshape, stride)
   if verbose:
     print 'row_extent, col_extent', row_extent, col_extent
 
   # Get Starting block indices
-  start_idx = np.arange(HH)[:, None] * M + np.arange(WW * C)
+  start_idx = np.arange(HH)[:, None] * M + np.arange(WW)
   if verbose:
     print start_idx
 
