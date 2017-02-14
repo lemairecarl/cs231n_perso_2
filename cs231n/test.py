@@ -16,6 +16,7 @@ from blocks import *
 # conv_param = {'stride': 2, 'pad': 1}
 # out, _ = conv_forward_naive(x, w, b, conv_param, verbose=1)
 
-a = np.random.randint(0, 9, (4, 6))
+a = np.random.randint(0, 9, (2, 4, 4))
 print a
-block_view = im2col(a, (2, 4), (1, 2))
+block_view, _ = im3d_to_col(a, (2, 2), (1, 1))
+print block_view
