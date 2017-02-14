@@ -443,7 +443,7 @@ def conv_forward_naive(x, w, b, conv_param, verbose=0):
   if verbose > 0:
     print 'w_col', w_col.shape
   f_2dshape = (HH, WW * C)
-  row_extent, col_extent, _, _, _, _, _, _ = compute_output_size(x_col.shape[1:], f_2dshape, stride)
+  row_extent, col_extent = compute_output_size(x_col.shape[1:], f_2dshape, stride)
   num_blocks = row_extent * col_extent
   if verbose > 0:
     print 'row_extent, col_extent', row_extent, col_extent
