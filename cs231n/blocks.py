@@ -64,16 +64,6 @@ def im3d_to_col(x, fshape, stride):
   return np.take(x, indices), indices
 
 
-def sum_col2im(col, indices, inshape):
-  # inshape = (H, W * C)
-
-  # col     : (n_blocks, block_size)  block_size = HH * WW * C + 1
-  # indices : (n_blocks, block_size)
-  # assert col.shape == indices.shape
-  result = sum_by_group(col.flatten(), indices.flatten())  # --> (input.size,) = (H * W * C)
-  return np.reshape(result, inshape)
-
-
 def sum_by_group(values, groups):
   # http://stackoverflow.com/questions/4373631/sum-array-by-number-in-numpy
   order = np.argsort(groups)

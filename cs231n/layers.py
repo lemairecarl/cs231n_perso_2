@@ -504,8 +504,8 @@ def conv_backward_naive(dout, cache):
   # For each image i in X:
   #   dx = dA dot W.T
   #   dW = x.T dot dA
-  #   where   x is the blocks of image i with biases  (n_blocks, HH * WW * C + 1)
-  #           W is the weights with biases            (HH * WW * C + 1, n_filters)
+  #   where   x is the blocks of image i with biases  (n_blocks, fsize + 1)
+  #           W is the weights with biases            (fsize + 1, n_filters)
   #           A is the activations (out)              (n_blocks, n_filters)
 
   n_blocks = blocks_with_bias.shape[1]
@@ -518,30 +518,29 @@ def conv_backward_naive(dout, cache):
   db = np.zeros(w_shape[0])
 
   for i, x in enumerate(blocks_with_bias):
-    # x : (n_blocks, HH * WW * C + 1)
+    # x : (n_blocks, C * HH * WW + 1)
 
     # compute gradient wrt weights and biases
     image_dW = x.T.dot(dout[i])
 
     # extract dw and db
-    dw_flat = image_dW[:-1, :]  # --> (HH * WW * C, F)
-    dw_flat = dw_flat.T  # --> (F, HH * WW * C)
-    image_dw = np.reshape(dw_flat, (F, HH, WW, C))
-    image_dw = np.moveaxis(image_dw, -1, 1)  # --> (F, C, HH, WW)
+    dw_flat = image_dW[:-1, :]  # --> (C * HH * WW, F)
+    dw_flat = dw_flat.T  # --> (F, C * HH * WW)
+    image_dw = np.reshape(dw_flat, (F, C, HH, WW))
     dw += image_dw
     db += image_dW[-1, :]
 
-    # compute block-wise gradient : (n_blocks, HH * WW * C + 1) per image
+    # compute block-wise gradient : (n_blocks, C * HH * WW + 1) per image
     image_dX = dout[i].dot(w_col.T)
 
     # Discard gradient wrt 1-column
-    image_dX = image_dX[:, :-1]  # --> (n_blocks, HH * WW * C)
+    image_dX = image_dX[:, :-1]  # --> (n_blocks, C * HH * WW)
 
     # Get gradients wrt pixel components
-    dpix = sum_col2im(image_dX, im2col_indices[i], (H, W * C))  # --> (H, W * C)
-    image_dx = np.reshape(dpix, (H, W, C))
-    image_dx = image_dx[pad:-pad, pad:-pad, :]  # unpad
-    dx[i, :, :, :] = np.moveaxis(image_dx, -1, 0)  # --> (C, H, W) as in x
+    dpix = sum_by_group(image_dX.flatten(), im2col_indices[i].flatten())  # --> (C * H * W)
+    image_dx = np.reshape(dpix, (C, H, W))
+    image_dx = image_dx[:, pad:-pad, pad:-pad]  # unpad
+    dx[i, :, :, :] = image_dx
 
   #############################################################################
   #                             END OF YOUR CODE                              #
