@@ -429,42 +429,34 @@ def conv_forward_naive(x, w, b, conv_param, verbose=0):
     print 'After pad', x.shape
   N, C, H, W = x.shape
   F, C, HH, WW = w.shape
-  stride = (conv_param['stride'], conv_param['stride'] * C)  # account for R G B, R G B, ...
-
-  # Make images 2D by combining width and depth into one dimension (R G B R G B ...)
-  x_col = np.moveaxis(x, 1, -1)  # Move channels axis --> (N, H, W, C)
-  x_col = np.reshape(x_col, (N, H, W * C))  # Make 2D images
+  stride = (conv_param['stride'],) * 2
 
   # Flatten filters as columns in a matrix
-  w_col = np.moveaxis(w, 1, -1)  # --> (F, HH, WW, C)
-  w_col = np.reshape(w_col, (F, HH * WW * C))
-  w_col = w_col.T  # make compatible for matrix mult --> (HH * WW * C, F)
-  w_col = np.concatenate((w_col, b[None, :]), axis=0)  # include weights! --> (HH * WW * C + 1, F)
+  w_col = np.reshape(w, (F, -1))  # --> (F, fsize) where fsize = C * HH * WW
+  w_col = w_col.T  # make compatible for matrix mult --> (fsize, F)
+  w_col = np.concatenate((w_col, b[None, :]), axis=0)  # include weights! --> (fsize + 1, F)
   if verbose > 0:
     print 'w_col', w_col.shape
-  f_2dshape = (HH, WW * C)
-  row_extent, col_extent = compute_output_size(x_col.shape[1:], f_2dshape, stride)
+  row_extent, col_extent = compute_output_size(x.shape[2:], (HH, WW), stride)
   num_blocks = row_extent * col_extent
   if verbose > 0:
     print 'row_extent, col_extent', row_extent, col_extent
-  # TODO stride
 
   blocks_with_bias = np.empty((N, num_blocks, w_col.shape[0]))
   im2col_indices = np.empty((N, num_blocks, w_col.shape[0] - 1))  # Bias not in this
-  a_col = np.empty((N, row_extent * col_extent, F))
+  a_col = np.empty((N, num_blocks, F))
   if verbose > 0:
     print 'a_col', a_col.shape
-  for i, image in enumerate(x_col):
-    if verbose > 1:
-      print '2d image', image.shape
-    im_col, im2col_indices[i, :, :] = im2col(image, f_2dshape, stride=stride)  # make blocks, keep indices for backpr
+  for i, image in enumerate(x):
+    im_col, im2col_indices[i, :, :] = im3d_to_col(image, (HH, WW), stride=stride)  # make blocks, keep indices for backpr
     im_col = np.concatenate((im_col, np.ones((num_blocks, 1))), axis=1)  # include bias factor
-    blocks_with_bias[i, :, :] = im_col  # (n_blocks, HH * WW * C + 1)
+    blocks_with_bias[i, :, :] = im_col  # (n_blocks, fsize + 1 + 1)
     if verbose > 1:
       print 'im_col', im_col.shape
     a_col[i, :, :] = im_col.dot(w_col)
 
   # Reshape activations from 1D to 3D
+  # a_col : (N, n_blocks, F)
   a = np.moveaxis(a_col, -1, 1)  # --> (N, F, n_blocks)
   if verbose > 0:
     print a.shape
