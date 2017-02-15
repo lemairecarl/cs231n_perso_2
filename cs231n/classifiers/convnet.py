@@ -3,6 +3,7 @@ import numpy as np
 from cs231n.layers import *
 from cs231n.fast_layers import *
 from cs231n.layer_utils import *
+from cs231n.my_layer_utils import *
 
 
 def pn(p, i):
@@ -26,14 +27,13 @@ class FlexNet(object):
     self.params = {}
     self.reg = reg
     self.dtype = dtype
-
+    self.layers = {}
 
     # pass conv_param to the forward pass for the convolutional layer
     self.conv_param = {'stride': 1, 'pad': (filter_size - 1) / 2}
 
     # pass pool_param to the forward pass for the max-pooling layer
     self.poolsize = 2
-
 
     # Parameter init ===================
 
@@ -46,7 +46,9 @@ class FlexNet(object):
     self.params = {}
     # Params for first repeatable block (conv-conv-pool)
     image_size = np.array((H, W))
+    self.layers['phase1'] = []
     for i, block_num_filters in enumerate(num_filters):
+      self.layers['phase1'] += [None]
       self.params[pn('Wcoa', i)] = np.random.randn(block_num_filters, C, filter_size, filter_size) * weight_scale
       self.params[pn('Wcob', i)] = np.random.randn(block_num_filters, C, filter_size, filter_size) * weight_scale
       self.params[pn('bcoa', i)] = np.zeros(block_num_filters)
@@ -55,42 +57,43 @@ class FlexNet(object):
 
     # Params for last repeatable block (affine)
     input_size = (num_filters[-1] * np.prod(image_size),) + hidden_dim
+    self.layers['phase2'] = []
     for i, block_hidden_dim in enumerate(hidden_dim):
+      self.layers['phase2'] += [None]
       self.params[pn('Waf', i)] = np.random.randn(input_size[i], block_hidden_dim) * weight_scale
       self.params[pn('baf', i)] = np.zeros(block_hidden_dim)
+      self.params[pn('gamma_af', i)] = np.ones((block_hidden_dim,))
+      self.params[pn('beta_af', i)] = np.zeros((block_hidden_dim,))
 
     for k, v in self.params.iteritems():
       self.params[k] = v.astype(dtype)
 
-
   def loss(self, X, y=None):
     """
-    Evaluate loss and gradient for the three-layer convolutional network.
+    Evaluate loss and gradient for the convolutional network.
 
     Inputs:
     - X: Array of input data of shape (N, C, H, W)
     - y: Array of labels, of shape (N,). y[i] gives the label for X[i].
-
-    Input / output: Same API as TwoLayerNet in fc_net.py.
     """
-    W1, b1 = self.params['W1'], self.params['b1']
-    W2, b2 = self.params['W2'], self.params['b2']
-    W3, b3 = self.params['W3'], self.params['b3']
 
-    scores = None
-    ############################################################################
-    # TODO: Implement the forward pass for the three-layer convolutional net,  #
-    # computing the class scores for X and storing them in the scores          #
-    # variable.                                                                #
-    ############################################################################
     N, C, H, W = X.shape
 
-    F1, cache1 = conv_relu_pool_forward(X, W1, b1, conv_param, pool_param)
-    F2, cache2 = affine_relu_forward(F1, W2, b2)
-    scores, cache3 = affine_forward(F2, W3, b3)
-    ############################################################################
-    #                             END OF YOUR CODE                             #
-    ############################################################################
+    convp = self.conv_param
+    poolp = {'pool_height': self.poolsize, 'pool_width': self.poolsize, 'stride': self.poolsize}
+    bnp = {'mode': 'train' if y is not None else 'test'}
+
+    F_phase1 = {'a': {}, 'b': {}, 'p': {-1: X}}  # p is pool
+    for i, l in enumerate(self.layers['phase1']):
+      # TODO implement conv_bn_relu
+      F_phase1['a'][i] = conv_relu_forward(F_phase1['p'][i - 1], self.getp('Wcoa', i), self.getp('bcoa', i), convp)
+      F_phase1['b'][i] = conv_relu_forward(F_phase1['a'][i], self.getp('Wcob', i), self.getp('bcob', i), convp)
+      F_phase1['p'][i] = max_pool_forward_fast(F_phase1['b'][i], poolp)
+
+    F_phase2 = {-1: F_phase1['p'][-1]}
+    for i, l in enumerate(self.layers['phase2']):
+      F_phase2[i] = affine_bn_relu_forward(F_phase2[i - 1], self.getp('Waf', i), self.getp('baf', i),
+                                           self.getp('gamma_af', i), self.getp('beta_af', i), bnp)
 
     if y is None:
       return scores
@@ -117,3 +120,6 @@ class FlexNet(object):
     ############################################################################
 
     return loss, grads
+
+  def getp(self, p, i):
+    return self.params[pn(p, i)]
