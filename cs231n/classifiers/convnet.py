@@ -47,10 +47,11 @@ class FlexNet(object):
     # Params for first repeatable block (conv-conv-pool)
     image_size = np.array((H, W))
     self.layers['phase1'] = []
+    in_channels = (C,) + num_filters  # (3, 32, 64, 128)
     for i, block_num_filters in enumerate(num_filters):
       self.layers['phase1'] += [None]
-      self.params[pn('Wcoa', i)] = np.random.randn(block_num_filters, C, filter_size, filter_size) * weight_scale
-      self.params[pn('Wcob', i)] = np.random.randn(block_num_filters, C, filter_size, filter_size) * weight_scale
+      self.params[pn('Wcoa', i)] = np.random.randn(block_num_filters, in_channels[i], filter_size, filter_size) * weight_scale
+      self.params[pn('Wcob', i)] = np.random.randn(block_num_filters, block_num_filters, filter_size, filter_size) * weight_scale
       self.params[pn('bcoa', i)] = np.zeros(block_num_filters)
       self.params[pn('bcob', i)] = np.zeros(block_num_filters)
       image_size /= self.poolsize  # Effect of pooling layer
@@ -85,10 +86,14 @@ class FlexNet(object):
     
     convp = self.conv_param
     poolp = {'pool_height': self.poolsize, 'pool_width': self.poolsize, 'stride': self.poolsize}
-    bnp = {'mode': 'train' if y is not None else 'test'}
+    bnp = []
+    for _ in self.layers['phase2']:
+      bnp.append({'mode': 'train' if y is not None else 'test'})
+    assert bnp[0] is not bnp[1]
     
     F_phase1 = {'a': {}, 'b': {}, 'p': {-1: X}}  # p is pool
     c_phase1 = {'a': {}, 'b': {}, 'p': {}}
+    i = 0
     for i, l in enumerate(self.layers['phase1']):
       # TODO implement conv_bn_relu
       F_phase1['a'][i], c_phase1['a'][i] = conv_relu_forward(F_phase1['p'][i - 1], self.getp('Wcoa', i),
@@ -96,14 +101,15 @@ class FlexNet(object):
       F_phase1['b'][i], c_phase1['b'][i] = conv_relu_forward(F_phase1['a'][i], self.getp('Wcob', i),
                                                              self.getp('bcob', i), convp)
       F_phase1['p'][i], c_phase1['p'][i] = max_pool_forward_fast(F_phase1['b'][i], poolp)
+    phase1_last_i = i
     
-    F_phase2 = {-1: F_phase1['p'][-1]}
+    F_phase2 = {-1: F_phase1['p'][i].reshape((N, -1))}
     c_phase2 = {'a': {}, 'b': {}, 'p': {}}
     for i, l in enumerate(self.layers['phase2']):
       F_phase2[i], c_phase2[i] = affine_bn_relu_forward(F_phase2[i - 1], self.getp('Waf', i), self.getp('baf', i),
-                                                        self.getp('gamma_af', i), self.getp('beta_af', i), bnp)
+                                                        self.getp('gamma_af', i), self.getp('beta_af', i), bnp[i])
     
-    scores, cache_last = affine_forward(F_phase2[-1], self.params['Wlast'], self.params['blast'])
+    scores, cache_last = affine_forward(F_phase2[i], self.params['Wlast'], self.params['blast'])
     
     if y is None:
       return scores
@@ -128,11 +134,11 @@ class FlexNet(object):
       loss += 0.5 * self.reg * np.sum(np.square(self.getp('Waf', i)))
       grads[pn('Waf', i)] += self.reg * np.sum(self.getp('Waf', i))
       
-    dF_phase1 = {'a': {len(self.layers['phase1']): dF_phase2[0]}, 'b': {}, 'p': {}}
+    dF_phase1 = {'a': {len(self.layers['phase1']): dF_phase2[0].reshape(F_phase1['p'][phase1_last_i].shape)}, 'b': {}, 'p': {}}
     for i in range(len(self.layers['phase1']) - 1, -1, -1):
       dF_phase1['p'][i] = max_pool_backward_fast(dF_phase1['a'][i + 1], c_phase1['p'][i])
-      dF_phase1['b'][i], grads[pn('Wcob', i)], grads[pn('bcob', i)] = conv_relu_pool_backward(dF_phase1['p'][i], c_phase1['b'][i])
-      dF_phase1['a'][i], grads[pn('Wcoa', i)], grads[pn('bcoa', i)] = conv_relu_pool_backward(dF_phase1['b'][i], c_phase1['a'][i])
+      dF_phase1['b'][i], grads[pn('Wcob', i)], grads[pn('bcob', i)] = conv_relu_backward(dF_phase1['p'][i], c_phase1['b'][i])
+      dF_phase1['a'][i], grads[pn('Wcoa', i)], grads[pn('bcoa', i)] = conv_relu_backward(dF_phase1['b'][i], c_phase1['a'][i])
 
       # Regularization
       loss += 0.5 * self.reg * (np.sum(np.square(self.getp('Wcoa', i))) + np.sum(np.square(self.getp('Wcob', i))))
