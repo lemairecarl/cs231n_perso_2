@@ -39,18 +39,16 @@ def im2col(x, fshape, stride, verbose=False):
 
 def im3d_to_col(x, fshape, stride):
   C, H, W = x.shape
-  HH, WW = fshape
-  CC = C  # filters always span the entire depth of the input
+  CC, HH, WW = fshape
 
-  OH, OW = compute_output_size(x.shape[1:], fshape, stride)  # this function is 2D-aware
-  OC = 1  # since the filter takes the entire depth, output depth is 1
+  OH, OW = compute_output_size(x.shape[1:], fshape[1:], stride)  # this function is 2D-aware
+  OC = C / CC
 
   # Compute starting block indices
   start_idx = np.arange(CC)[:, None, None] * (H * W) + np.arange(HH)[None, :, None] * W + np.arange(WW)[None, None, :]
   #print start_idx
 
   # Get block offsets wrt flattened input array
-
   offset_c = np.arange(OC)[:, None, None] * (H * W)
   offset_h = np.arange(OH)[None, :, None] * W * stride[0]
   offset_w = np.arange(OW)[None, None, :] * stride[1]

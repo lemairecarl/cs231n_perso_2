@@ -448,7 +448,7 @@ def conv_forward_naive(x, w, b, conv_param, verbose=0):
   if verbose > 0:
     print 'a_col', a_col.shape
   for i, image in enumerate(x):
-    im_col, im2col_indices[i, :, :] = im3d_to_col(image, (HH, WW), stride=stride)  # make blocks, keep indices for backpr
+    im_col, im2col_indices[i, :, :] = im3d_to_col(image, (C, HH, WW), stride=stride)  # make blocks, keep indices for backpr
     im_col = np.concatenate((im_col, np.ones((num_blocks, 1))), axis=1)  # include bias factor
     blocks_with_bias[i, :, :] = im_col  # (n_blocks, fsize + 1 + 1)
     if verbose > 1:
@@ -568,18 +568,28 @@ def max_pool_forward_naive(x, pool_param):
   # TODO: Implement the max pooling forward pass                              #
   #############################################################################
   N, C, H, W = x.shape
-  pool_h, pool_w = pool_param['pool_height'], pool_param['pool_width']
+  pool_size = pool_param['pool_height'], pool_param['pool_width']
+  stride = (pool_param['stride'],) * 2
+  out_size = x.shape / np.array((1, 1) + pool_size)  # = (N, C, H', W')
+  n_blocks = np.prod(out_size[-2:])
+  block_size = int(np.prod(pool_size))
 
-  # Convert input to 2D
-  x = np.moveaxis(x, 1, -1)  # --> (N, H, W, C)
-  x = np.reshape(x, (N, H, W * C))
-
-  # Convert input to block columns
-  x_col = im2col(x, )
+  out = np.empty(out_size)
+  orig_idx = np.empty((N, np.prod(out_size[1:])), dtype=np.uint32)
+  for i, activation in enumerate(x):
+    # activation : (C, H, W)
+    # Convert input to block columns
+    x_col, im2col_indices = im3d_to_col(activation, (1,) + pool_size, stride)  # --> (C * n_blocks, block_size)
+    col_max_idx = np.argmax(x_col, axis=1)
+    max_mask = np.arange(block_size)[None, :] == col_max_idx[:, None]
+    out_flat = x_col[max_mask]  # (C * H' * W')
+    orig_idx[i, :] = im2col_indices[max_mask]  # (C * H' * W')
+    out_3d = np.reshape(out_flat, out_size[1:])
+    out[i] = out_3d
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
-  cache = (x, pool_param)
+  cache = (x.shape, orig_idx)
   return out, cache
 
 
@@ -598,7 +608,14 @@ def max_pool_backward_naive(dout, cache):
   #############################################################################
   # TODO: Implement the max pooling backward pass                             #
   #############################################################################
-  pass
+  x_shape, orig_idx = cache
+
+  block3d_size = np.prod(x_shape[1:])
+  offsets = np.arange(x_shape[0], dtype=np.uint32) * block3d_size
+  orig_idx += offsets[:, None]  # idx rel to img --> idx rel to mini-batch
+
+  dx = np.zeros(x_shape)
+  np.put(dx, orig_idx, dout.flatten())
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
