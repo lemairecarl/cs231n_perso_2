@@ -1,15 +1,4 @@
 import numpy as np
-from classifiers.cnn import *
+from cs231n.classifiers.convnet import *
 
-model = ThreeLayerConvNet()
-
-N = 50
-X = np.random.randn(N, 3, 32, 32)
-y = np.random.randint(10, size=N)
-
-loss, grads = model.loss(X, y)
-print 'Initial loss (no regularization): ', loss
-
-model.reg = 0.5
-loss, grads = model.loss(X, y)
-print 'Initial loss (with regularization): ', loss
+model = FlexNet(num_filters=(32, 64, 128), hidden_dim=(100, 50))
