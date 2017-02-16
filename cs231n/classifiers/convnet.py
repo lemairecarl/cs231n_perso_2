@@ -29,6 +29,7 @@ class FlexNet(object):
     self.reg = reg
     self.dtype = dtype
     self.layers = {}
+    self.loss_scale = 1.0
     
     # pass conv_param to the forward pass for the convolutional layer
     self.conv_param = {'stride': 1, 'pad': (filter_size - 1) / 2}
@@ -122,7 +123,7 @@ class FlexNet(object):
     
     loss, grads = 0, {}
 
-    loss, dscores = softmax_loss(scores, y)
+    loss, dscores = softmax_loss(scores, y, scale=self.loss_scale)
     dFlast_input, grads['Wlast'], grads['blast'] = affine_backward(dscores, cache_last)
     
     dF_phase2 = {len(self.layers['phase2']): dFlast_input}

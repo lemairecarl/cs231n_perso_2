@@ -731,7 +731,7 @@ def svm_loss(x, y):
   return loss, dx
 
 
-def softmax_loss(x, y):
+def softmax_loss(x, y, scale=1.0):
   """
   Computes the loss and gradient for softmax classification.
 
@@ -752,4 +752,7 @@ def softmax_loss(x, y):
   dx = probs.copy()
   dx[np.arange(N), y] -= 1
   dx /= N
+  
+  loss *= scale
+  dx *= scale  # useful for gradient checking
   return loss, dx
