@@ -43,7 +43,7 @@ def gradient_check():
   X = np.random.randn(num_inputs, *input_dim)
   y = np.random.randint(num_classes, size=num_inputs)
   
-  model = FlexNet(input_dim=input_dim, num_filters=(4,), hidden_dim=(10,), dtype=np.float64)
+  model = FlexNet(input_dim=input_dim, num_filters=(4,), hidden_dim=(10,), reg=reg, dtype=np.float64)
   model.print_params()
 
   print '\n--- Gradient check ---'
@@ -53,6 +53,9 @@ def gradient_check():
   for param_name in sorted(grads):
     f = lambda _: model.loss(X, y)[0]
     param_grad_num = eval_numerical_gradient(f, model.params[param_name], verbose=False, h=1e-6, pname=param_name)
+    rescale = 1e7
+    param_grad_num *= rescale  # rescale for more precise number comparison
+    grads[param_name] *= rescale
     e = rel_error(param_grad_num, grads[param_name])
     results[param_name] = e
     smallest[param_name] = np.min(np.abs(np.concatenate((grads[param_name].flatten(), param_grad_num.flatten()))))
@@ -60,7 +63,7 @@ def gradient_check():
   sys.stdout.flush()
   print '\n\nMax relative error:'
   for p in sorted(results):
-    print '{:<10} {:e} {:e} {}'.format(p, results[p], smallest[p], gradient_check_message(results[p]))
+    print '{:<10} {:e} {:<15}   minval: {:e}'.format(p, results[p], gradient_check_message(results[p]), smallest[p])
       
 
 #loss_sanity_check()
