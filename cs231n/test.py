@@ -49,21 +49,30 @@ def gradient_check():
   print '\n--- Gradient check ---'
   loss, grads = model.loss(X, y)
   results = {}
-  smallest = {}
+  avg = {}
   for param_name in sorted(grads):
     f = lambda _: model.loss(X, y)[0]
     param_grad_num = eval_numerical_gradient(f, model.params[param_name], verbose=False, h=1e-6, pname=param_name)
-    rescale = 1e7
-    param_grad_num *= rescale  # rescale for more precise number comparison
-    grads[param_name] *= rescale
     e = rel_error(param_grad_num, grads[param_name])
-    results[param_name] = e
-    smallest[param_name] = np.min(np.abs(np.concatenate((grads[param_name].flatten(), param_grad_num.flatten()))))
+    
+    if e > 1e-10:
+      mean_val = np.mean(np.abs(param_grad_num))
+      rescale = 1.0 / mean_val # rescale for more precise number comparison
+      param_grad_num *= rescale
+      grads[param_name] *= rescale
+      e_rescaled = rel_error(param_grad_num, grads[param_name])
+    else:
+      e_rescaled = 0
+    
+    results[param_name] = e, e_rescaled
+    avg[param_name] = np.mean(np.abs(grads[param_name])), np.mean(np.abs(param_grad_num))
 
   sys.stdout.flush()
   print '\n\nMax relative error:'
+  print '{:<10} {:<12} {:<12} {:<15}           {:<12} {:<12}'.format('Param', 'Error', 'Rescaled', '', 'Ana', 'Num')
   for p in sorted(results):
-    print '{:<10} {:e} {:<15}   minval: {:e}'.format(p, results[p], gradient_check_message(results[p]), smallest[p])
+    msg = gradient_check_message(results[p][1])
+    print '{:<10} {:e} {:e} {:<15}   avgval: {:e} {:e}'.format(p, results[p][0], results[p][1], msg, *avg[p])
       
 
 #loss_sanity_check()
