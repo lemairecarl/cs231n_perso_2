@@ -1,7 +1,8 @@
 import numpy as np
 from random import randrange
+from tqdm import tqdm
 
-def eval_numerical_gradient(f, x, verbose=True, h=0.00001):
+def eval_numerical_gradient(f, x, verbose=True, h=0.00001, pname=None):
   """ 
   a naive implementation of numerical gradient of f at x 
   - f should be a function that takes a single argument
@@ -12,7 +13,7 @@ def eval_numerical_gradient(f, x, verbose=True, h=0.00001):
   grad = np.zeros_like(x)
   # iterate over all indexes in x
   it = np.nditer(x, flags=['multi_index'], op_flags=['readwrite'])
-  while not it.finished:
+  for _ in tqdm(it, total=np.prod(x.shape), ncols=80, leave=False, desc=pname, disable=verbose):
 
     # evaluate function at x+h
     ix = it.multi_index
@@ -27,7 +28,7 @@ def eval_numerical_gradient(f, x, verbose=True, h=0.00001):
     grad[ix] = (fxph - fxmh) / (2 * h) # the slope
     if verbose:
       print ix, grad[ix]
-    it.iternext() # step to next dimension
+    #it.iternext() # step to next dimension
 
   return grad
 

@@ -89,7 +89,6 @@ class FlexNet(object):
     bnp = []
     for _ in self.layers['phase2']:
       bnp.append({'mode': 'train' if y is not None else 'test'})
-    assert bnp[0] is not bnp[1]
     
     F_phase1 = {'a': {}, 'b': {}, 'p': {-1: X}}  # p is pool
     c_phase1 = {'a': {}, 'b': {}, 'p': {}}
@@ -149,3 +148,10 @@ class FlexNet(object):
   
   def getp(self, p, i):
     return self.params[pn(p, i)]
+
+  def print_params(self):
+    print '\n--- Network parameters ---'
+    print '{:<10} {}'.format('Name', 'Shape')
+    print '{:<10} {}'.format('----', '-----')
+    for p in sorted(self.params):
+      print '{:<10} {}'.format(p, self.params[p].shape)
