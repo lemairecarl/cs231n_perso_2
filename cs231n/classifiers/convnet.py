@@ -1,3 +1,4 @@
+import hashlib
 import numpy as np
 
 from cs231n.layers import *
@@ -93,12 +94,17 @@ class FlexNet(object):
     F_phase1 = {'a': {}, 'b': {}, 'p': {-1: X}}  # p is pool
     c_phase1 = {'a': {}, 'b': {}, 'p': {}}
     i = 0
+    
+    relu_hash = hashlib.md5()
+    
     for i, l in enumerate(self.layers['phase1']):
       # TODO implement conv_bn_relu
       F_phase1['a'][i], c_phase1['a'][i] = conv_relu_forward(F_phase1['p'][i - 1], self.getp('Wcoa', i),
                                                              self.getp('bcoa', i), convp)
+      relu_hash.update(c_phase1['a'][i][1].data)  # add relu mask to hash
       F_phase1['b'][i], c_phase1['b'][i] = conv_relu_forward(F_phase1['a'][i], self.getp('Wcob', i),
                                                              self.getp('bcob', i), convp)
+      relu_hash.update(c_phase1['b'][i][1].data)  # add relu mask to hash
       F_phase1['p'][i], c_phase1['p'][i] = max_pool_forward_fast(F_phase1['b'][i], poolp)
     phase1_last_i = i
     
@@ -107,6 +113,7 @@ class FlexNet(object):
     for i, l in enumerate(self.layers['phase2']):
       F_phase2[i], c_phase2[i] = affine_bn_relu_forward(F_phase2[i - 1], self.getp('Waf', i), self.getp('baf', i),
                                                         self.getp('gamma_af', i), self.getp('beta_af', i), bnp[i])
+      relu_hash.update(c_phase2[i][2].data)  # add relu mask to hash
     
     scores, cache_last = affine_forward(F_phase2[i], self.params['Wlast'], self.params['blast'])
     
@@ -144,7 +151,7 @@ class FlexNet(object):
       grads[pn('Wcoa', i)] += self.reg * np.sum(self.getp('Wcoa', i))
       grads[pn('Wcob', i)] += self.reg * np.sum(self.getp('Wcob', i))
     
-    return loss, grads
+    return loss, grads, relu_hash.hexdigest()
   
   def getp(self, p, i):
     return self.params[pn(p, i)]

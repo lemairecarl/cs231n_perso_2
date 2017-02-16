@@ -35,6 +35,15 @@ def gradient_check_message(err):
     return ''
 
 
+def fix_kinks(grad_ana, grad_num):
+  nan_mask = np.where(grad_num == 1e100)
+  num_kinks = np.sum(nan_mask)
+  if num_kinks > 0:
+    print np.sum(nan_mask), 'kinks encountered'
+    grad_num[nan_mask] = grad_ana[nan_mask]  # Where kinks are crossed, treat as error = 0
+  return num_kinks
+
+
 def gradient_check():
   num_inputs = 2
   input_dim = (3, 16, 16)  # 16 - 16 16 8 (32, 8, 8) - 8 8 4 (64, 4, 4) - 4 4 2 - (128, 2, 2)
@@ -47,12 +56,16 @@ def gradient_check():
   model.print_params()
 
   print '\n--- Gradient check ---'
-  loss, grads = model.loss(X, y)
+  loss, grads, _ = model.loss(X, y)
   results = {}
   avg = {}
+  kinks = {}
   for param_name in sorted(grads):
-    f = lambda _: model.loss(X, y)[0]
+    def f(_):
+      out = model.loss(X, y)
+      return out[0], out[2]  # also give relu hash
     param_grad_num = eval_numerical_gradient(f, model.params[param_name], verbose=False, h=1e-6, pname=param_name)
+    kinks[param_name] = fix_kinks(grads[param_name], param_grad_num)
     e = rel_error(param_grad_num, grads[param_name])
     
     if e > 1e-10:
@@ -69,10 +82,10 @@ def gradient_check():
 
   sys.stdout.flush()
   print '\n\nMax relative error:'
-  print '{:<10} {:<12} {:<12} {:<15}           {:<12} {:<12}'.format('Param', 'Error', 'Rescaled', '', 'Ana', 'Num')
+  print '{:<10} {:<12} {:<12} {:<15}           {:<12} {:<12} {}'.format('Param', 'Error', 'Rescaled', '', 'Ana', 'Num', 'Kinks')
   for p in sorted(results):
     msg = gradient_check_message(results[p][1])
-    print '{:<10} {:e} {:e} {:<15}   avgval: {:e} {:e}'.format(p, results[p][0], results[p][1], msg, *avg[p])
+    print '{:<10} {:e} {:e} {:<15}   avgval: {:e} {:e} {}'.format(p, results[p][0], results[p][1], msg, avg[p][0], avg[p][1], kinks[p])
       
 
 #loss_sanity_check()

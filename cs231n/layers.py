@@ -89,7 +89,7 @@ def relu_forward(x):
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
-  cache = x
+  cache = x > 0
   return out, cache
 
 
@@ -104,11 +104,11 @@ def relu_backward(dout, cache):
   Returns:
   - dx: Gradient with respect to x
   """
-  dx, x = None, cache
+  dx, x_gt_zero = None, cache
   #############################################################################
   # TODO: Implement the ReLU backward pass.                                   #
   #############################################################################
-  dout_dx = x > 0
+  dout_dx = x_gt_zero
   dx = dout * dout_dx
   #############################################################################
   #                             END OF YOUR CODE                              #
