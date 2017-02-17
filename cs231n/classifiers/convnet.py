@@ -96,17 +96,18 @@ class FlexNet(object):
     c_phase1 = {'a': {}, 'b': {}, 'p': {}}
     i = 0
     
-    relu_hash = hashlib.md5()
+    kink_hash = hashlib.md5()
     
     for i, l in enumerate(self.layers['phase1']):
       # TODO implement conv_bn_relu
       F_phase1['a'][i], c_phase1['a'][i] = conv_relu_forward(F_phase1['p'][i - 1], self.getp('Wcoa', i),
                                                              self.getp('bcoa', i), convp)
-      relu_hash.update(c_phase1['a'][i][1].data)  # add relu mask to hash
+      kink_hash.update(c_phase1['a'][i][1].data)  # add relu mask to hash
       F_phase1['b'][i], c_phase1['b'][i] = conv_relu_forward(F_phase1['a'][i], self.getp('Wcob', i),
                                                              self.getp('bcob', i), convp)
-      relu_hash.update(c_phase1['b'][i][1].data)  # add relu mask to hash
-      F_phase1['p'][i], c_phase1['p'][i] = max_pool_forward_fast(F_phase1['b'][i], poolp)
+      kink_hash.update(c_phase1['b'][i][1].data)  # add relu mask to hash
+      F_phase1['p'][i], c_phase1['p'][i] = max_pool_forward_naive(F_phase1['b'][i], poolp)
+      kink_hash.update(c_phase1['p'][i][1].data)
     phase1_last_i = i
     
     F_phase2 = {-1: F_phase1['p'][i].reshape((N, -1))}
@@ -114,7 +115,7 @@ class FlexNet(object):
     for i, l in enumerate(self.layers['phase2']):
       F_phase2[i], c_phase2[i] = affine_bn_relu_forward(F_phase2[i - 1], self.getp('Waf', i), self.getp('baf', i),
                                                         self.getp('gamma_af', i), self.getp('beta_af', i), bnp[i])
-      relu_hash.update(c_phase2[i][2].data)  # add relu mask to hash
+      kink_hash.update(c_phase2[i][2].data)  # add relu mask to hash
     
     scores, cache_last = affine_forward(F_phase2[i], self.params['Wlast'], self.params['blast'])
     
@@ -143,7 +144,7 @@ class FlexNet(object):
       
     dF_phase1 = {'a': {len(self.layers['phase1']): dF_phase2[0].reshape(F_phase1['p'][phase1_last_i].shape)}, 'b': {}, 'p': {}}
     for i in range(len(self.layers['phase1']) - 1, -1, -1):
-      dF_phase1['p'][i] = max_pool_backward_fast(dF_phase1['a'][i + 1], c_phase1['p'][i])
+      dF_phase1['p'][i] = max_pool_backward_naive(dF_phase1['a'][i + 1], c_phase1['p'][i])
       dF_phase1['b'][i], grads[pn('Wcob', i)], grads[pn('bcob', i)] = conv_relu_backward(dF_phase1['p'][i], c_phase1['b'][i])
       dF_phase1['a'][i], grads[pn('Wcoa', i)], grads[pn('bcoa', i)] = conv_relu_backward(dF_phase1['b'][i], c_phase1['a'][i])
 
@@ -152,7 +153,7 @@ class FlexNet(object):
       grads[pn('Wcoa', i)] += self.reg * np.sum(self.getp('Wcoa', i))
       grads[pn('Wcob', i)] += self.reg * np.sum(self.getp('Wcob', i))
     
-    return loss, grads, relu_hash.hexdigest()
+    return loss, grads, kink_hash.hexdigest()
   
   def getp(self, p, i):
     return self.params[pn(p, i)]

@@ -19,12 +19,12 @@ def eval_numerical_gradient(f, x, verbose=True, h=0.00001, pname=None):
     ix = it.multi_index
     oldval = x[ix]
     x[ix] = oldval + h # increment by h
-    fxph, relu_hash1 = f(x) # evalute f(x + h)
+    fxph, kink_hash1 = f(x) # evalute f(x + h)
     x[ix] = oldval - h
-    fxmh, relu_hash2 = f(x) # evaluate f(x - h)
+    fxmh, kink_hash2 = f(x) # evaluate f(x - h)
     x[ix] = oldval # restore
     
-    if relu_hash1 != relu_hash2:
+    if kink_hash1 != kink_hash2:
       grad[ix] = 1e100
     else:
       # compute the partial derivative with centered formula

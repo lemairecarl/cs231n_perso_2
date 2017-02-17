@@ -38,10 +38,10 @@ def gradient_check_message(err):
 
 
 def fix_kinks(grad_ana, grad_num):
-  nan_mask = np.where(grad_num == 1e100)
+  nan_mask = grad_num > 1e90
   num_kinks = np.sum(nan_mask)
   if num_kinks > 0:
-    print np.sum(nan_mask), 'kinks encountered'
+    print num_kinks, 'kinks encountered over', grad_ana.size
     grad_num[nan_mask] = grad_ana[nan_mask]  # Where kinks are crossed, treat as error = 0
   return num_kinks
 
@@ -59,10 +59,12 @@ def gradient_check():
 
   # Train a bit before grad check
   print '\n--- Training a few epochs ---'
-  model = overfit_small_data(model, epochs=2, verbose=False)
+  model = overfit_small_data(model, epochs=4, verbose=False)
   
-  model.loss_scale = 1e5
+  model.loss_scale = 1e4
   
+  # TODO functional model
+  # TODO check individual parts?
   # TODO check fewer dimensions
   # TODO test without reg and only reg
   # TODO try multiple h
@@ -72,7 +74,7 @@ def gradient_check():
   results = {}
   avg = {}
   kinks = {}
-  h = 1e-6
+  h = 1e-5
   for param_name in sorted(grads):
     def f(_):
       out = model.loss(X, y)
