@@ -1,11 +1,8 @@
 import numpy as np
 
-try:
-  from layers import *
-  from layer_utils import *
-except ImportError:
-  from cs231n.layers import *
-  from cs231n.layer_utils import *
+from cs231n.layers import *
+from cs231n.layer_utils import *
+from cs231n.my_layer_utils import *
 
 
 class TwoLayerNet(object):
