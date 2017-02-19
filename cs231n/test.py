@@ -18,11 +18,11 @@ def loss_sanity_check():
   N = 50
   X = np.random.randn(N, 3, 32, 32)
   y = np.random.randint(10, size=N)
-  loss, grads, _ = model.loss(X, y)
+  loss, grads = model.loss(X, y)
   print 'Initial loss (no regularization): ', loss
   
   model.reg = 0.5
-  loss, grads, _ = model.loss(X, y)
+  loss, grads = model.loss(X, y)
   print 'Initial loss (with regularization): ', loss
 
 
@@ -58,10 +58,10 @@ def gradient_check():
   model.print_params()
 
   # Train a bit before grad check
-  print '\n--- Training a few epochs ---'
   model = overfit_small_data(model, epochs=4, verbose=False)
   
   model.loss_scale = 1e4
+  model.compute_hashes = True
   
   # TODO functional model
   # TODO check individual parts?
@@ -92,15 +92,25 @@ def gradient_check():
     print '{:<10} {:<13e} {:<15}   avgval: {:<13e} {:<13e} {}'.format(p, results[p], msg, avg[p][0], avg[p][1], kinks[p])
 
 
-def overfit_small_data(model, epochs=10, verbose=True):
+def overfit_small_data(model=None, epochs=10, verbose=True):
+  
   data = get_CIFAR10_data(dir='datasets/cifar-10-batches-py')
-  num_train = 100
+  num_train = 20
   small_data = {
     'X_train': data['X_train'][:num_train],
     'y_train': data['y_train'][:num_train],
     'X_val': data['X_val'],
     'y_val': data['y_val'],
   }
+
+  if model is None:
+    input_dim = small_data['X_train'].shape[1:]
+    print input_dim
+    # 32 - 16, 8, 4, 2
+    model = FlexNet(input_dim=input_dim, num_filters=(8, 8, 16, 16), hidden_dim=(100,))
+    model.print_params()
+
+  print '\n--- Training a few epochs ---'
   
   solver = Solver(model, small_data,
                   num_epochs=epochs, batch_size=50,
@@ -114,5 +124,6 @@ def overfit_small_data(model, epochs=10, verbose=True):
   return model
    
 
-loss_sanity_check()
-gradient_check()
+#loss_sanity_check()
+#gradient_check()
+overfit_small_data()

@@ -29,7 +29,10 @@ class FlexNet(object):
     self.reg = reg
     self.dtype = dtype
     self.layers = {}
+    
+    # Gradient checking
     self.loss_scale = 1.0
+    self.compute_hashes = False
     
     # pass conv_param to the forward pass for the convolutional layer
     self.conv_param = {'stride': 1, 'pad': (filter_size - 1) / 2}
@@ -56,6 +59,10 @@ class FlexNet(object):
       self.params[pn('Wcob', i)] = np.random.randn(block_num_filters, block_num_filters, filter_size, filter_size) * weight_scale
       self.params[pn('bcoa', i)] = np.zeros(block_num_filters)
       self.params[pn('bcob', i)] = np.zeros(block_num_filters)
+      self.params[pn('gamma_coa', i)] = np.ones((block_num_filters,))
+      self.params[pn('gamma_cob', i)] = np.ones((block_num_filters,))
+      self.params[pn('beta_coa', i)] = np.zeros((block_num_filters,))
+      self.params[pn('beta_cob', i)] = np.zeros((block_num_filters,))
       image_size /= self.poolsize  # Effect of pooling layer
     
     # Params for last repeatable block (affine)
@@ -88,34 +95,47 @@ class FlexNet(object):
     
     convp = self.conv_param
     poolp = {'pool_height': self.poolsize, 'pool_width': self.poolsize, 'stride': self.poolsize}
-    bnp = []
+    bnp_phase1 = {'a': [], 'b': []}
+    for _ in self.layers['phase1']:
+      bnp_phase1['a'].append({'mode': 'train' if y is not None else 'test'})
+      bnp_phase1['b'].append({'mode': 'train' if y is not None else 'test'})
+    bnp_phase2 = []
     for _ in self.layers['phase2']:
-      bnp.append({'mode': 'train' if y is not None else 'test'})
+      bnp_phase2.append({'mode': 'train' if y is not None else 'test'})
     
     F_phase1 = {'a': {}, 'b': {}, 'p': {-1: X}}  # p is pool
     c_phase1 = {'a': {}, 'b': {}, 'p': {}}
     i = 0
+
+    kink_hash = None
+    if self.compute_hashes:
+      kink_hash = hashlib.md5()
     
-    kink_hash = hashlib.md5()
+    def add_to_hash(a):
+      if not self.compute_hashes:
+        return
+      a_contiguous = np.ascontiguousarray(a)
+      kink_hash.update(a_contiguous.data)
     
     for i, l in enumerate(self.layers['phase1']):
-      # TODO implement conv_bn_relu
-      F_phase1['a'][i], c_phase1['a'][i] = conv_relu_forward(F_phase1['p'][i - 1], self.getp('Wcoa', i),
-                                                             self.getp('bcoa', i), convp)
-      kink_hash.update(c_phase1['a'][i][1].data)  # add relu mask to hash
-      F_phase1['b'][i], c_phase1['b'][i] = conv_relu_forward(F_phase1['a'][i], self.getp('Wcob', i),
-                                                             self.getp('bcob', i), convp)
-      kink_hash.update(c_phase1['b'][i][1].data)  # add relu mask to hash
+      F_phase1['a'][i], c_phase1['a'][i] = conv_bn_relu_forward(F_phase1['p'][i - 1], self.getp('Wcoa', i),
+                                                             self.getp('bcoa', i), self.getp('gamma_coa', i),
+                                                             self.getp('beta_coa', i), convp, bnp_phase1['a'][i])
+      add_to_hash(c_phase1['a'][i][2])  # add relu mask to hash
+      F_phase1['b'][i], c_phase1['b'][i] = conv_bn_relu_forward(F_phase1['a'][i], self.getp('Wcob', i),
+                                                             self.getp('bcob', i), self.getp('gamma_cob', i),
+                                                             self.getp('beta_cob', i), convp, bnp_phase1['b'][i])
+      add_to_hash(c_phase1['b'][i][2])  # add relu mask to hash
       F_phase1['p'][i], c_phase1['p'][i] = max_pool_forward_naive(F_phase1['b'][i], poolp)
-      kink_hash.update(c_phase1['p'][i][1].data)
+      add_to_hash(c_phase1['p'][i][1])  # add maxpool mask to hash
     phase1_last_i = i
     
     F_phase2 = {-1: F_phase1['p'][i].reshape((N, -1))}
     c_phase2 = {'a': {}, 'b': {}, 'p': {}}
     for i, l in enumerate(self.layers['phase2']):
       F_phase2[i], c_phase2[i] = affine_bn_relu_forward(F_phase2[i - 1], self.getp('Waf', i), self.getp('baf', i),
-                                                        self.getp('gamma_af', i), self.getp('beta_af', i), bnp[i])
-      kink_hash.update(c_phase2[i][2].data)  # add relu mask to hash
+                                                        self.getp('gamma_af', i), self.getp('beta_af', i), bnp_phase2[i])
+      add_to_hash(c_phase2[i][2])  # add relu mask to hash
     
     scores, cache_last = affine_forward(F_phase2[i], self.params['Wlast'], self.params['blast'])
     
@@ -126,6 +146,10 @@ class FlexNet(object):
 
     loss, dscores = softmax_loss(scores, y, scale=self.loss_scale)
     dFlast_input, grads['Wlast'], grads['blast'] = affine_backward(dscores, cache_last)
+    
+    # Last layer regularization
+    loss += 0.5 * self.reg * np.sum(np.square(self.params['Wlast']))
+    grads['Wlast'] += self.reg * self.params['Wlast']
     
     dF_phase2 = {len(self.layers['phase2']): dFlast_input}
     for i in range(len(self.layers['phase2']) - 1, -1, -1):
@@ -140,20 +164,37 @@ class FlexNet(object):
 
       # Regularization
       loss += 0.5 * self.reg * np.sum(np.square(self.getp('Waf', i)))
-      grads[pn('Waf', i)] += self.reg * np.sum(self.getp('Waf', i))
+      grads[pn('Waf', i)] += self.reg * self.getp('Waf', i)
       
     dF_phase1 = {'a': {len(self.layers['phase1']): dF_phase2[0].reshape(F_phase1['p'][phase1_last_i].shape)}, 'b': {}, 'p': {}}
     for i in range(len(self.layers['phase1']) - 1, -1, -1):
       dF_phase1['p'][i] = max_pool_backward_naive(dF_phase1['a'][i + 1], c_phase1['p'][i])
-      dF_phase1['b'][i], grads[pn('Wcob', i)], grads[pn('bcob', i)] = conv_relu_backward(dF_phase1['p'][i], c_phase1['b'][i])
-      dF_phase1['a'][i], grads[pn('Wcoa', i)], grads[pn('bcoa', i)] = conv_relu_backward(dF_phase1['b'][i], c_phase1['a'][i])
+      out = conv_bn_relu_backward(dF_phase1['p'][i], c_phase1['b'][i])
+      (
+        dF_phase1['b'][i],
+        grads[pn('Wcob', i)],
+        grads[pn('bcob', i)],
+        grads[pn('gamma_cob', i)],
+        grads[pn('beta_cob', i)]
+      ) = out
+      out = conv_bn_relu_backward(dF_phase1['b'][i], c_phase1['a'][i])
+      (
+        dF_phase1['a'][i],
+        grads[pn('Wcoa', i)],
+        grads[pn('bcoa', i)],
+        grads[pn('gamma_coa', i)],
+        grads[pn('beta_coa', i)]
+      ) = out
 
       # Regularization
       loss += 0.5 * self.reg * (np.sum(np.square(self.getp('Wcoa', i))) + np.sum(np.square(self.getp('Wcob', i))))
-      grads[pn('Wcoa', i)] += self.reg * np.sum(self.getp('Wcoa', i))
-      grads[pn('Wcob', i)] += self.reg * np.sum(self.getp('Wcob', i))
+      grads[pn('Wcoa', i)] += self.reg * self.getp('Wcoa', i)
+      grads[pn('Wcob', i)] += self.reg * self.getp('Wcob', i)
     
-    return loss, grads, kink_hash.hexdigest()
+    if self.compute_hashes:
+      return loss, grads, kink_hash.hexdigest()
+    else:
+      return loss, grads
   
   def getp(self, p, i):
     return self.params[pn(p, i)]
@@ -162,5 +203,8 @@ class FlexNet(object):
     print '\n--- Network parameters ---'
     print '{:<10} {}'.format('Name', 'Shape')
     print '{:<10} {}'.format('----', '-----')
+    total_size = 0
     for p in sorted(self.params):
       print '{:<10} {}'.format(p, self.params[p].shape)
+      total_size += self.params[p].size
+    print 'Total params:', total_size
