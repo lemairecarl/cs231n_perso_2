@@ -26,16 +26,17 @@ def loss_sanity_check():
 #loss_sanity_check()
 #test.overfit_small_data(model, num_train=num_train, epochs=20)
 
-data = get_CIFAR10_data(dir='datasets/cifar-10-batches-py')
-num_train = 20
-num_val = np.minimum(data['X_val'].shape[0], num_train)
-small_data = {
-'X_train': data['X_train'][:num_train],
-'y_train': data['y_train'][:num_train],
-'X_val': data['X_val'][:num_val],
-'y_val': data['y_val'][:num_val],
-}
+# data = get_CIFAR10_data(dir='datasets/cifar-10-batches-py')
+# num_train = 100
+# num_val = np.minimum(data['X_val'].shape[0], num_train)
+# small_data = {
+# 'X_train': data['X_train'][:num_train],
+# 'y_train': data['y_train'][:num_train],
+# 'X_val': data['X_val'][:num_val],
+# 'y_val': data['y_val'][:num_val],
+# }
 
-model = Sequential(batch_shape=small_data['X_train'].shape, weight_scale=1e-3)
+model = Sequential(batch_shape=(50, 3, 32, 32), weight_scale=1e-3, reg=0.0)
+model.add(Dense(num_neurons=100))
 model.add(Dense(num_neurons=10))
 model.build(loss=Softmax())

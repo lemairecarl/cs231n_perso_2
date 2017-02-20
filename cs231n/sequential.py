@@ -9,7 +9,12 @@ def is_x_a_y(x, y):
 
 
 class Sequential(object):
+  
+  num_instances = {}  # Num instances of each layer type
+  
   def __init__(self, batch_shape, reg=0.0, weight_scale=1e-3):
+    Sequential.num_instances.clear()
+    
     self.weight_scale = weight_scale
     self.reg = reg
     self.params = {}
@@ -65,8 +70,6 @@ class Sequential(object):
 class SequentialLayer:
   __metaclass__ = ABCMeta
   
-  num_instances = {}  # Number of instances of each type of layer
-  
   def __init__(self):
     self.model = None
     self.previous_layer = None
@@ -78,9 +81,11 @@ class SequentialLayer:
     self.output_shape = None
     
   def make_name(self):
-    if self.__class__ not in self.num_instances:
-      self.num_instances[self.__class__] = 1
-    num = self.num_instances[self.__class__]
+    counts = Sequential.num_instances
+    if self.__class__ not in counts:
+      counts[self.__class__] = 0
+    counts[self.__class__] += 1
+    num = counts[self.__class__]
     return self.__class__.__name__ + str(num)
     
   @abstractmethod
@@ -114,6 +119,8 @@ class SequentialLayer:
 
   def add_param(self, name, arr):
     name = self.name + '_' + name
+    if name in self.model.params:
+      raise KeyError('Param already exists')
     self.model.params[name] = arr
     return self.model.params[name]
   
@@ -154,7 +161,7 @@ class Dense(SequentialLayer):
     w_b[-1, :] = 0  # Init bias to zero
     self.w = self.add_param('Wb', w_b)
     
-    self.output_shape = self.previous_output_shape
+    self.output_shape = (self.previous_output_shape[0], self.num_neurons)
   
   def forward(self):
     n = self.previous_output_shape[0]
