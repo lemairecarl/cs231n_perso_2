@@ -2,6 +2,8 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 
+from cs231n.my_layer_utils import conv_bn_relu_forward, conv_bn_relu_backward
+
 
 def is_x_a_y(x, y):
   """Returns True if x's class is a subclass of y."""
@@ -59,12 +61,21 @@ class Sequential(object):
       l.backward()
     loss = self.loss_layer.loss
     
-    # Regularization TODO really regul all params?
+    # Regularization
     for n, w in self.params.items():
-      loss += 0.5 * self.reg * np.sum(np.square(w))
-      self.grads[n] += self.reg * w
+      if n.endswith('_W'):
+        loss += 0.5 * self.reg * np.sum(np.square(w))
+        self.grads[n] += self.reg * w
     
     return loss, self.grads
+  
+  def print_params(self):
+    print 'Model parameters:'
+    num_params = 0
+    for k, v in self.params.items():
+      print '{:<20} {}'.format(k, v.shape)
+      num_params += v.size
+    print 'Total', num_params
 
 
 class SequentialLayer:
@@ -127,7 +138,10 @@ class SequentialLayer:
   def set_grad(self, name, arr):
     name = self.name + '_' + name
     self.model.grads[name] = arr
-      
+    
+  def set_grads(self, grad_dict):
+      for k, v in grad_dict.items():
+        self.set_grad(k, v)
   
 class InputLayer(SequentialLayer):
   def __init__(self, output_shape):
@@ -176,6 +190,50 @@ class Dense(SequentialLayer):
     self.out_grad = dx1[:, :-1].reshape(self.previous_output_shape)
     # Grad wrt params
     self.set_grad('Wb', self.x1.T.dot(dout))
+
+
+class ConvBnRelu(SequentialLayer):
+  def __init__(self, num_filters, filter_size=3):
+    super(ConvBnRelu, self).__init__()
+
+    self.num_filters = num_filters
+    self.filter_size = filter_size
+    self.w = None
+    self.b = None
+    self.gamma = None
+    self.beta = None
+    self.cache = None
+    self.conv_param = {'stride': 1, 'pad': (filter_size - 1) / 2}  # convtype: same
+    self.bn_param = {'mode': 'train'}
+
+  def init(self):
+    in_shape = self.previous_layer.output_shape
+    w_filters = np.random.randn(self.num_filters, in_shape[1],
+                                  self.filter_size, self.filter_size) * self.model.weight_scale
+    self.w = self.add_param('W', w_filters)
+    self.b = self.add_param('b', np.zeros(self.num_filters))
+    self.gamma = self.add_param('gamma', np.ones(self.num_filters))
+    self.beta = self.add_param('beta', np.zeros(self.num_filters))
+    
+    self.output_shape = (in_shape[0], self.num_filters) + in_shape[2:]
+
+  def forward(self):
+    # TODO mode=test if called with y=None
+    x = self.get_input_data()
+    self.output_data, self.cache = conv_bn_relu_forward(x, self.w, self.b,
+                                                        self.gamma, self.beta, self.conv_param, self.bn_param)
+
+  def backward(self):
+    dout = self.get_upstream_grad()
+    out = conv_bn_relu_backward(dout, self.cache)
+    dx, dw, db, dgamma, dbeta = out
+    self.out_grad = dx
+    self.set_grads({
+      'W': dw,
+      'b': db,
+      'gamma': dgamma,
+      'beta': dbeta
+    })
 
 
 class Softmax(SequentialLayer):
