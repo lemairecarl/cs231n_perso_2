@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 
+from cs231n.fast_layers import *
 from cs231n.my_layer_utils import conv_bn_relu_forward, conv_bn_relu_backward
 
 
@@ -90,6 +91,7 @@ class SequentialLayer:
     self.out_grad = None
     self.output_data = None
     self.output_shape = None
+    self.cache = None
     
   def make_name(self):
     counts = Sequential.num_instances
@@ -215,7 +217,7 @@ class ConvBnRelu(SequentialLayer):
     self.gamma = self.add_param('gamma', np.ones(self.num_filters))
     self.beta = self.add_param('beta', np.zeros(self.num_filters))
     
-    self.output_shape = (in_shape[0], self.num_filters) + in_shape[2:]
+    self.output_shape = (in_shape[0], self.num_filters, in_shape[2], in_shape[3])
 
   def forward(self):
     # TODO mode=test if called with y=None
@@ -234,6 +236,29 @@ class ConvBnRelu(SequentialLayer):
       'gamma': dgamma,
       'beta': dbeta
     })
+
+
+class Pool(SequentialLayer):
+  def __init__(self, pool_factor=2):
+    super(Pool, self).__init__()
+
+    self.pool_param = {
+      'pool_height': pool_factor,
+      'pool_width': pool_factor,
+      'stride': pool_factor
+    }
+
+  def init(self):
+    ph, pw = self.pool_param['pool_height'], self.pool_param['pool_width']
+    self.output_shape = self.previous_layer.output_shape / np.array((1, 1, ph, pw)).flatten()
+
+  def forward(self):
+    x = self.get_input_data()
+    self.output_data, self.cache = max_pool_forward_fast(x, self.pool_param)
+
+  def backward(self):
+    dout = self.get_upstream_grad()
+    self.out_grad = max_pool_backward_fast(dout, self.cache)
 
 
 class Softmax(SequentialLayer):

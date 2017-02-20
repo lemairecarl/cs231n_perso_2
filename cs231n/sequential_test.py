@@ -38,6 +38,9 @@ def loss_sanity_check():
 
 model = Sequential(batch_shape=(50, 3, 32, 32), weight_scale=1e-3, reg=0.0)
 model.add(ConvBnRelu(8))
+model.add(Pool())
+model.add(ConvBnRelu(8))
+model.add(Pool())
 model.add(Dense(num_neurons=10))
 model.build(loss=Softmax())
 model.print_params()
