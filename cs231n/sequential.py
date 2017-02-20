@@ -9,15 +9,14 @@ def is_x_a_y(x, y):
 
 
 class Sequential(object):
-  def __init__(self, input_shape, weight_scale=1e-3):
-    self.input_shape = input_shape
+  def __init__(self, batch_shape, weight_scale=1e-3):
     self.weight_scale = weight_scale
     self.params = {}
     self.grads = {}
     
     self.layers = []
     self.loss_layer = None
-    self.input_layer = InputLayer(input_shape)
+    self.input_layer = InputLayer(batch_shape)
     self.add(self.input_layer)
     
   def add(self, layer):
@@ -139,6 +138,7 @@ class Dense(SequentialLayer):
     self.num_neurons = num_neurons
     self.w = None
     self.previous_output_shape = None
+    self.x1 = None  # cached value
 
   def init(self):
     self.previous_output_shape = self.previous_layer.output_shape
@@ -150,10 +150,10 @@ class Dense(SequentialLayer):
     self.output_shape = self.previous_output_shape
   
   def forward(self):
-    x = self.get_input_data()
-    n = x.shape[0]
-    x = np.concatenate((x, np.ones((n, 1))), axis=1)
-    self.output_data = x.dot(self.w)
+    n = self.previous_output_shape[0]
+    x = self.get_input_data().reshape(n, -1)
+    self.x1 = np.concatenate((x, np.ones((n, 1))), axis=1)
+    self.output_data = self.x1.dot(self.w)
   
   def backward(self):
     dout = self.get_upstream_grad()
@@ -161,8 +161,7 @@ class Dense(SequentialLayer):
     dx1 = dout.dot(self.w.T)  # --> (20, 101)
     self.out_grad = dx1[:, :-1].reshape(self.previous_output_shape)
     # Grad wrt params
-    x = self.get_input_data()
-    self.set_grad('Wb', x.T.dot(dout))
+    self.set_grad('Wb', self.x1.T.dot(dout))
 
 
 class Softmax(SequentialLayer):

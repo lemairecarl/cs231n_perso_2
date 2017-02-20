@@ -92,15 +92,14 @@ def gradient_check():
     print '{:<10} {:<13e} {:<15}   avgval: {:<13e} {:<13e} {}'.format(p, results[p], msg, avg[p][0], avg[p][1], kinks[p])
 
 
-def overfit_small_data(model=None, epochs=10, verbose=True):
+def overfit_small_data(model=None, epochs=10, num_train=20, verbose=True):
   
   data = get_CIFAR10_data(dir='datasets/cifar-10-batches-py')
-  num_train = 20
   small_data = {
-    'X_train': data['X_train'][:num_train],
+    'X_train': data['X_train'][:num_train] / 127.0,
     'y_train': data['y_train'][:num_train],
-    'X_val': data['X_val'],
-    'y_val': data['y_val'],
+    'X_val': data['X_val'][:num_train] / 127.0,  # batch size must be constant
+    'y_val': data['y_val'][:num_train],
   }
 
   if model is None:
@@ -113,10 +112,10 @@ def overfit_small_data(model=None, epochs=10, verbose=True):
   print '\n--- Training a few epochs ---'
   
   solver = Solver(model, small_data,
-                  num_epochs=epochs, batch_size=50,
-                  update_rule='adam',
+                  num_epochs=epochs, batch_size=np.minimum(50, num_train),
+                  update_rule='sgd',
                   optim_config={
-                    'learning_rate': 1e-3,
+                    'learning_rate': 1e-4,
                   },
                   verbose=verbose, print_every=1)
   solver.train()
@@ -124,6 +123,7 @@ def overfit_small_data(model=None, epochs=10, verbose=True):
   return model
    
 
-#loss_sanity_check()
-#gradient_check()
-overfit_small_data()
+if __name__ == "__main__":
+  #loss_sanity_check()
+  #gradient_check()
+  overfit_small_data()
