@@ -26,21 +26,18 @@ def loss_sanity_check():
 #loss_sanity_check()
 #test.overfit_small_data(model, num_train=num_train, epochs=20)
 
-# data = get_CIFAR10_data(dir='datasets/cifar-10-batches-py')
-# num_train = 100
-# num_val = np.minimum(data['X_val'].shape[0], num_train)
-# small_data = {
-# 'X_train': data['X_train'][:num_train],
-# 'y_train': data['y_train'][:num_train],
-# 'X_val': data['X_val'][:num_val],
-# 'y_val': data['y_val'][:num_val],
-# }
+total_examples = 2
+data = get_CIFAR10_data(dir='datasets/cifar-10-batches-py')
+X = data['X_train'][:total_examples] / 127.0
+y = data['y_train'][:total_examples]
 
-model = Sequential(batch_shape=(50, 3, 32, 32), weight_scale=1e-3, reg=0.0)
-model.add(ConvBnRelu(8))
+model = Sequential(batch_shape=X.shape, weight_scale=1e-3, reg=0.0)
+model.add(ConvBnRelu(2))
 model.add(Pool())
-model.add(ConvBnRelu(8))
+model.add(ConvBnRelu(2))
 model.add(Pool())
 model.add(Dense(num_neurons=10))
 model.build(loss=Softmax())
 model.print_params()
+
+test.gradient_check(model, X, y)
