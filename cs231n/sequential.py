@@ -137,6 +137,17 @@ class SequentialLayer:
     self.model.params[name] = arr
     return self.model.params[name]
   
+  def get_param(self, name):
+    name = self.name + '_' + name
+    return self.model.params[name]
+  
+  def get_params(self, names):
+    params = []
+    for n in names:
+      name = self.name + '_' + n
+      params.append(self.model.params[name])
+    return tuple(params)
+  
   def set_grad(self, name, arr):
     name = self.name + '_' + name
     self.model.grads[name] = arr
@@ -166,7 +177,6 @@ class Dense(SequentialLayer):
     super(self.__class__, self).__init__()
     
     self.num_neurons = num_neurons
-    self.w = None
     self.previous_output_shape = None
     self.x1 = None  # cached value
 
@@ -175,7 +185,7 @@ class Dense(SequentialLayer):
     input_dim = np.prod(self.previous_output_shape[1:])
     w_b = np.random.randn(input_dim + 1, self.num_neurons) * self.model.weight_scale
     w_b[-1, :] = 0  # Init bias to zero
-    self.w = self.add_param('Wb', w_b)
+    self.add_param('Wb', w_b)
     
     self.output_shape = (self.previous_output_shape[0], self.num_neurons)
   
@@ -183,12 +193,14 @@ class Dense(SequentialLayer):
     n = self.previous_output_shape[0]
     x = self.get_input_data().reshape(n, -1)
     self.x1 = np.concatenate((x, np.ones((n, 1))), axis=1)
-    self.output_data = self.x1.dot(self.w)
+    w = self.get_param('Wb')
+    self.output_data = self.x1.dot(w)
   
   def backward(self):
     dout = self.get_upstream_grad()
     # Grad wrt input
-    dx1 = dout.dot(self.w.T)  # --> (20, 101)
+    w = self.get_param('Wb')
+    dx1 = dout.dot(w.T)  # --> (20, 101)
     self.out_grad = dx1[:, :-1].reshape(self.previous_output_shape)
     # Grad wrt params
     self.set_grad('Wb', self.x1.T.dot(dout))
@@ -200,10 +212,6 @@ class ConvBnRelu(SequentialLayer):
 
     self.num_filters = num_filters
     self.filter_size = filter_size
-    self.w = None
-    self.b = None
-    self.gamma = None
-    self.beta = None
     self.cache = None
     self.conv_param = {'stride': 1, 'pad': (filter_size - 1) / 2}  # convtype: same
     self.bn_param = {'mode': 'train'}
@@ -212,18 +220,18 @@ class ConvBnRelu(SequentialLayer):
     in_shape = self.previous_layer.output_shape
     w_filters = np.random.randn(self.num_filters, in_shape[1],
                                   self.filter_size, self.filter_size) * self.model.weight_scale
-    self.w = self.add_param('W', w_filters)
-    self.b = self.add_param('b', np.zeros(self.num_filters))
-    self.gamma = self.add_param('gamma', np.ones(self.num_filters))
-    self.beta = self.add_param('beta', np.zeros(self.num_filters))
+    self.add_param('W', w_filters)
+    self.add_param('b', np.zeros(self.num_filters))
+    self.add_param('gamma', np.ones(self.num_filters))
+    self.add_param('beta', np.zeros(self.num_filters))
     
     self.output_shape = (in_shape[0], self.num_filters, in_shape[2], in_shape[3])
 
   def forward(self):
     # TODO mode=test if called with y=None
     x = self.get_input_data()
-    self.output_data, self.cache = conv_bn_relu_forward(x, self.w, self.b,
-                                                        self.gamma, self.beta, self.conv_param, self.bn_param)
+    w, b, gamma, beta = self.get_params(['W', 'b', 'gamma', 'beta'])
+    self.output_data, self.cache = conv_bn_relu_forward(x, w, b, gamma, beta, self.conv_param, self.bn_param)
 
   def backward(self):
     dout = self.get_upstream_grad()

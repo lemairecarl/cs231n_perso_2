@@ -7,6 +7,7 @@ import sys
 
 def rel_error(x, y):
   """ returns relative error """
+  #print '{:e} {:e}'.format(np.max(np.abs(x)), np.max(np.abs(y)))
   return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
@@ -73,7 +74,7 @@ def gradient_check(model, X, y):
   loss, grads = model.loss(X, y)
   results = {}
   avg = {}
-  h = 1e-5
+  h = 1e-4
   for param_name in sorted(grads):
     def f(_):
       out = model.loss(X, y)
@@ -84,7 +85,7 @@ def gradient_check(model, X, y):
     results[param_name] = rel_error(param_grad_num, grads[param_name])
   
   sys.stdout.flush()
-  print '\n\nMax relative error:   (h = {})'.format(h)
+  print 'Max relative error:   (h = {})'.format(h)
   print '{:<20} {:<13} {:<15}           {:<13} {:<13}'.format('Param', 'Error', '', 'Ana', 'Num')
   for p in sorted(results):
     msg = gradient_check_message(results[p])
