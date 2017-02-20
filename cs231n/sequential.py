@@ -9,8 +9,9 @@ def is_x_a_y(x, y):
 
 
 class Sequential(object):
-  def __init__(self, batch_shape, weight_scale=1e-3):
+  def __init__(self, batch_shape, reg=0.0, weight_scale=1e-3):
     self.weight_scale = weight_scale
+    self.reg = reg
     self.params = {}
     self.grads = {}
     
@@ -20,8 +21,9 @@ class Sequential(object):
     self.add(self.input_layer)
     
   def add(self, layer):
-    if not is_x_a_y(layer, SequentialLayer):
-      raise TypeError("parameter must be a SequentialLayer")
+    # TODO not working with iPython
+    #if not is_x_a_y(layer, SequentialLayer):
+    #  raise TypeError("parameter must be a SequentialLayer")
     
     layer.model = self
     if len(self.layers) > 0:
@@ -38,6 +40,7 @@ class Sequential(object):
     
   def loss(self, X, y=None):
     # Forward pass
+    assert X.shape == self.input_layer.output_shape
     self.input_layer.output_data = X
     for l in self.layers:
       l.forward()
@@ -49,10 +52,14 @@ class Sequential(object):
     self.loss_layer.ground_truth = y
     for l in reversed(self.layers):
       l.backward()
-
-    # TODO regularization
+    loss = self.loss_layer.loss
     
-    return self.loss_layer.loss, self.grads
+    # Regularization TODO really regul all params?
+    for n, w in self.params.items():
+      loss += 0.5 * self.reg * np.sum(np.square(w))
+      self.grads[n] += self.reg * w
+    
+    return loss, self.grads
 
 
 class SequentialLayer:
@@ -117,7 +124,7 @@ class SequentialLayer:
   
 class InputLayer(SequentialLayer):
   def __init__(self, output_shape):
-    super(InputLayer, self).__init__()
+    super(self.__class__, self).__init__()
     
     self.output_shape = output_shape
 
@@ -133,7 +140,7 @@ class InputLayer(SequentialLayer):
 
 class Dense(SequentialLayer):
   def __init__(self, num_neurons):
-    super(Dense, self).__init__()
+    super(self.__class__, self).__init__()
     
     self.num_neurons = num_neurons
     self.w = None
@@ -166,7 +173,7 @@ class Dense(SequentialLayer):
 
 class Softmax(SequentialLayer):
   def __init__(self):
-    super(Softmax, self).__init__()
+    super(self.__class__, self).__init__()
     
     self.loss = None
     self.scores = None
