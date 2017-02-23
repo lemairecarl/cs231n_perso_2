@@ -141,6 +141,10 @@ class SequentialLayer:
     self.model.params[name] = arr.astype(self.model.dtype)
     return self.model.params[name]
   
+  def add_params(self, param_dict):
+    for k, v in param_dict.items():
+      self.add_param(k, v)
+  
   def get_param(self, name):
     name = self.name + '_' + name
     return self.model.params[name]
@@ -182,32 +186,67 @@ class Dense(SequentialLayer):
     
     self.num_neurons = num_neurons
     self.previous_output_shape = None
-    self.x1 = None  # cached value
 
   def init(self):
     self.previous_output_shape = self.previous_layer.output_shape
     input_dim = np.prod(self.previous_output_shape[1:])
-    w_b = np.random.randn(input_dim + 1, self.num_neurons) * self.model.weight_scale
-    w_b[-1, :] = np.abs(w_b[-1, :])  # TODO Init bias to zero ?
-    self.add_param('Wb', w_b)
+    w = np.random.randn(input_dim, self.num_neurons) * self.model.weight_scale  # TODO try new init (sqrt)
+    b = np.zeros(self.num_neurons)
+    self.add_params({'W': w, 'b': b})
     
     self.output_shape = (self.previous_output_shape[0], self.num_neurons)
   
   def forward(self):
-    n = self.previous_output_shape[0]
-    x = self.get_input_data().reshape(n, -1)
-    self.x1 = np.concatenate((x, np.ones((n, 1))), axis=1)
-    w = self.get_param('Wb')
-    self.output_data = self.x1.dot(w)
+    def affine_forward(x, w, b):
+      """
+      Computes the forward pass for an affine (fully-connected) layer.
+
+      The input x has shape (N, d_1, ..., d_k) where x[i] is the ith input.
+      We multiply this against a weight matrix of shape (D, M) where
+      D = \prod_i d_i
+
+      Inputs:
+      x - Input data, of shape (N, d_1, ..., d_k)
+      w - Weights, of shape (D, M)
+      b - Biases, of shape (M,)
+
+      Returns a tuple of:
+      - out: output, of shape (N, M)
+      - cache: (x, w, b)
+      """
+      out = x.reshape(x.shape[0], -1).dot(w) + b
+      cache = (x, w, b)
+      return out, cache
+    
+    x = self.get_input_data()
+    w, b = self.get_params(['W', 'b'])
+    self.output_data, self.cache = affine_forward(x, w, b)
   
   def backward(self):
+    def affine_backward(dout, cache):
+      """
+      Computes the backward pass for an affine layer.
+
+      Inputs:
+      - dout: Upstream derivative, of shape (N, M)
+      - cache: Tuple of:
+        - x: Input data, of shape (N, d_1, ... d_k)
+        - w: Weights, of shape (D, M)
+
+      Returns a tuple of:
+      - dx: Gradient with respect to x, of shape (N, d1, ..., d_k)
+      - dw: Gradient with respect to w, of shape (D, M)
+      - db: Gradient with respect to b, of shape (M,)
+      """
+      x, w, b = cache
+      dx = dout.dot(w.T).reshape(x.shape)
+      dw = x.reshape(x.shape[0], -1).T.dot(dout)
+      db = np.sum(dout, axis=0)
+      return dx, dw, db
+    
     dout = self.get_upstream_grad()
-    # Grad wrt input
-    w = self.get_param('Wb')
-    dx1 = dout.dot(w.T)  # --> (20, 101)
-    self.out_grad = dx1[:, :-1].reshape(self.previous_output_shape)
-    # Grad wrt params
-    self.set_grad('Wb', self.x1.T.dot(dout))
+    self.out_grad, dw, db = affine_backward(dout, self.cache)
+    self.set_grads({'W': dw, 'b': db})
 
 
 class ConvBnRelu(SequentialLayer):
