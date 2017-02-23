@@ -181,17 +181,23 @@ class InputLayer(SequentialLayer):
 
 
 class Dense(SequentialLayer):
-  def __init__(self, num_neurons):
+  def __init__(self, num_neurons, weight_init='inv_sqrt_n'):
     super(self.__class__, self).__init__()
     
     self.num_neurons = num_neurons
     self.previous_output_shape = None
+    self.weight_init = weight_init
 
   def init(self):
     self.previous_output_shape = self.previous_layer.output_shape
     input_dim = np.prod(self.previous_output_shape[1:])
     w = np.random.randn(input_dim, self.num_neurons) * self.model.weight_scale
-    w /= np.sqrt(input_dim)
+    if self.weight_init == 'inv_sqrt_n':
+      w /= np.sqrt(input_dim)
+    elif self.weight_init == 'sqrt_2_over_n':
+      w *= np.sqrt(2.0 / input_dim)
+    else:
+      raise ValueError('WTF is that argument')
     b = np.zeros(self.num_neurons)
     self.add_params({'W': w, 'b': b})
     
@@ -338,3 +344,44 @@ class Softmax(SequentialLayer):
     dx[np.arange(n), y] -= 1
     dx /= n
     self.out_grad = dx
+    
+
+class Relu(SequentialLayer):
+  def init(self):
+    self.output_shape = self.previous_layer.output_shape
+
+  def forward(self):
+    def relu_forward(x):
+      """
+      Computes the forward pass for a layer of rectified linear units (ReLUs).
+
+      Input:
+      - x: Inputs, of any shape
+
+      Returns a tuple of:
+      - out: Output, of the same shape as x
+      - cache: x
+      """
+      out = np.maximum(0, x)
+      cache = x
+      return out, cache
+    
+    self.output_data, self.cache = relu_forward(self.get_input_data())
+
+  def backward(self):
+    def relu_backward(dout, cache):
+      """
+      Computes the backward pass for a layer of rectified linear units (ReLUs).
+
+      Input:
+      - dout: Upstream derivatives, of any shape
+      - cache: Input x, of same shape as dout
+
+      Returns:
+      - dx: Gradient with respect to x
+      """
+      x = cache
+      dx = np.where(x > 0, dout, 0)
+      return dx
+    
+    self.out_grad = relu_backward(self.get_upstream_grad(), self.cache)
