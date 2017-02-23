@@ -7,7 +7,7 @@ import test
 def make_data():
   # Make data
   N = 20
-  X = np.random.randn(N, 3, 32, 32) * 127
+  X = np.random.randn(N, 3, 32, 32)
   y = np.random.randint(10, size=N)
   return X, y
 
@@ -29,12 +29,13 @@ def loss_sanity_check():
 
 total_examples = 3
 data = get_CIFAR10_data(dir='datasets/cifar-10-batches-py')
-X = data['X_train'][:total_examples] / 127.0
+X = data['X_train'][:total_examples, :, :8, :8] / 127.0
 y = data['y_train'][:total_examples]
 
-model = Sequential(batch_shape=X.shape, weight_scale=1e-3, reg=0.0)
-model.add(ConvBnRelu(2))
-model.add(Pool(pool_factor=8))
+model = Sequential(batch_shape=X.shape, weight_scale=1e-3, reg=0.0, dtype=np.float64)
+#model.add(ConvBnRelu(2))
+#model.add(Pool(pool_factor=8))
+model.add(Dense(num_neurons=10))
 model.add(Dense(num_neurons=10))
 model.build(loss=Softmax())
 model.print_params()

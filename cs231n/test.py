@@ -7,7 +7,6 @@ import sys
 
 def rel_error(x, y):
   """ returns relative error """
-  #print '{:e} {:e}'.format(np.max(np.abs(x)), np.max(np.abs(y)))
   return np.max(np.abs(x - y) / (np.maximum(1e-8, np.abs(x) + np.abs(y))))
 
 
@@ -74,7 +73,7 @@ def gradient_check(model, X, y):
   loss, grads = model.loss(X, y)
   results = {}
   avg = {}
-  h = 1e-4
+  h = 1e-6
   for param_name in sorted(grads):
     def f(_):
       out = model.loss(X, y)
@@ -90,52 +89,6 @@ def gradient_check(model, X, y):
   for p in sorted(results):
     msg = gradient_check_message(results[p])
     print '{:<20} {:<13e} {:<15}   avgval: {:<13e} {:<13e}'.format(p, results[p], msg, avg[p][0], avg[p][1])
-
-
-def xgradient_check():
-  # num_inputs = 2
-  # input_dim = (3, 32, 32)
-  # reg = 0.0
-  # num_classes = 10
-  # X = np.random.randn(num_inputs, *input_dim)
-  # y = np.random.randint(num_classes, size=num_inputs)
-  #
-  # model = FlexNet(input_dim=input_dim, num_filters=(4,), hidden_dim=(10,), reg=reg, dtype=np.float64)
-  # model.print_params()
-  #
-  # # Train a bit before grad check
-  # model = overfit_small_data(model, epochs=4, verbose=False)
-  
-  model.loss_scale = 1e4
-  model.compute_hashes = True
-  
-  # TODO functional model
-  # TODO check individual parts?
-  # TODO check fewer dimensions
-  # TODO test without reg and only reg
-  # TODO try multiple h
-
-  print '\n--- Gradient check ---'
-  loss, grads, _ = model.loss(X, y)
-  results = {}
-  avg = {}
-  kinks = {}
-  h = 1e-5
-  for param_name in sorted(grads):
-    def f(_):
-      out = model.loss(X, y)
-      return out[0], out[2]  # also give relu hash
-    param_grad_num = eval_numerical_gradient2(f, model.params[param_name], verbose=False, h=h, pname=param_name)
-    kinks[param_name] = fix_kinks(grads[param_name], param_grad_num)
-    avg[param_name] = np.mean(np.abs(grads[param_name])), np.mean(np.abs(param_grad_num))
-    results[param_name] = rel_error(param_grad_num, grads[param_name])
-
-  sys.stdout.flush()
-  print '\n\nMax relative error:   (h = {})'.format(h)
-  print '{:<10} {:<13} {:<15}           {:<13} {:<13} {}'.format('Param', 'Error', '', 'Ana', 'Num', 'Kinks')
-  for p in sorted(results):
-    msg = gradient_check_message(results[p])
-    print '{:<10} {:<13e} {:<15}   avgval: {:<13e} {:<13e} {}'.format(p, results[p], msg, avg[p][0], avg[p][1], kinks[p])
 
 
 def overfit_small_data(model=None, epochs=10, num_train=20, verbose=True):

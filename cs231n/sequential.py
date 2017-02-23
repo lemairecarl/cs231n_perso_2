@@ -15,11 +15,12 @@ class Sequential(object):
   
   num_instances = {}  # Num instances of each layer type
   
-  def __init__(self, batch_shape, reg=0.0, weight_scale=1e-3):
+  def __init__(self, batch_shape, reg=0.0, weight_scale=1e-3, dtype=np.float32):
     Sequential.num_instances.clear()
     
     self.weight_scale = weight_scale
     self.reg = reg
+    self.dtype = dtype
     self.params = {}
     self.grads = {}
     
@@ -67,15 +68,18 @@ class Sequential(object):
       if n.endswith('_W'):
         loss += 0.5 * self.reg * np.sum(np.square(w))
         self.grads[n] += self.reg * w
+      elif n.endswith('_Wb'):
+        loss += 0.5 * self.reg * np.sum(np.square(w[:-1]))  # Omit the bias
+        self.grads[n][:-1] += self.reg * w[:-1]
     
     return loss, self.grads
   
   def print_params(self):
     print 'Model parameters:'
     num_params = 0
-    for k, v in self.params.items():
-      print '{:<20} {}'.format(k, v.shape)
-      num_params += v.size
+    for n in sorted(self.params):
+      print '{:<20} {}'.format(n, self.params[n].shape)
+      num_params += self.params[n].size
     print 'Total', num_params
 
 
@@ -134,7 +138,7 @@ class SequentialLayer:
     name = self.name + '_' + name
     if name in self.model.params:
       raise KeyError('Param already exists')
-    self.model.params[name] = arr
+    self.model.params[name] = arr.astype(self.model.dtype)
     return self.model.params[name]
   
   def get_param(self, name):
@@ -184,7 +188,7 @@ class Dense(SequentialLayer):
     self.previous_output_shape = self.previous_layer.output_shape
     input_dim = np.prod(self.previous_output_shape[1:])
     w_b = np.random.randn(input_dim + 1, self.num_neurons) * self.model.weight_scale
-    w_b[-1, :] = 0  # Init bias to zero
+    w_b[-1, :] = np.abs(w_b[-1, :])  # TODO Init bias to zero ?
     self.add_param('Wb', w_b)
     
     self.output_shape = (self.previous_output_shape[0], self.num_neurons)
