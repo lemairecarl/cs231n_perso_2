@@ -190,7 +190,8 @@ class Dense(SequentialLayer):
   def init(self):
     self.previous_output_shape = self.previous_layer.output_shape
     input_dim = np.prod(self.previous_output_shape[1:])
-    w = np.random.randn(input_dim, self.num_neurons) * self.model.weight_scale  # TODO try new init (sqrt)
+    w = np.random.randn(input_dim, self.num_neurons) * self.model.weight_scale
+    w /= np.sqrt(input_dim)
     b = np.zeros(self.num_neurons)
     self.add_params({'W': w, 'b': b})
     
