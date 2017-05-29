@@ -81,6 +81,11 @@ class Sequential(object):
       print '{:<20} {}'.format(n, self.params[n].shape)
       num_params += self.params[n].size
     print 'Total', num_params
+    
+  def print_layers(self):
+    print 'Layer outputs:'
+    for l in self.layers:
+      print '{:<15}  out: {}'.format(l.name, l.output_shape)
 
 
 class SequentialLayer:
@@ -270,6 +275,7 @@ class ConvBnRelu(SequentialLayer):
     in_shape = self.previous_layer.output_shape
     w_filters = np.random.randn(self.num_filters, in_shape[1],
                                   self.filter_size, self.filter_size) * self.model.weight_scale
+    w_filters *= np.sqrt(2.0 / np.prod(in_shape[1:]))
     self.add_param('W', w_filters)
     self.add_param('b', np.zeros(self.num_filters))
     self.add_param('gamma', np.ones(self.num_filters))
@@ -308,7 +314,7 @@ class Pool(SequentialLayer):
 
   def init(self):
     ph, pw = self.pool_param['pool_height'], self.pool_param['pool_width']
-    self.output_shape = self.previous_layer.output_shape / np.array((1, 1, ph, pw)).flatten()
+    self.output_shape = tuple(self.previous_layer.output_shape / np.array((1, 1, ph, pw)).flatten())
 
   def forward(self):
     x = self.get_input_data()
